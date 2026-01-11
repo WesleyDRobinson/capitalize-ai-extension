@@ -276,6 +276,10 @@ TRACING_ENDPOINT=
 
 # Domain Configuration
 DOMAIN=api.yourdomain.com
+
+# Docker Image (set by CI/CD, or manually for first deploy)
+# Example: ghcr.io/yourorg/yourrepo-api:latest
+API_IMAGE=ghcr.io/OWNER/REPO-api:latest
 EOF
 
 chown $DOCKER_USER:$DOCKER_USER $APP_DIR/config/.env.template
@@ -286,8 +290,6 @@ log "Environment template created at $APP_DIR/config/.env.template"
 #-------------------------------------------------------------------------------
 log "Creating production docker-compose..."
 cat > $APP_DIR/docker-compose.prod.yml << 'EOF'
-version: '3.8'
-
 services:
   nats:
     image: nats:2.10-alpine
@@ -310,7 +312,7 @@ services:
           memory: 512M
 
   api:
-    image: ghcr.io/YOUR_ORG/conversational-platform:latest
+    image: ${API_IMAGE:-ghcr.io/OWNER/REPO-api:latest}
     container_name: api
     restart: unless-stopped
     ports:

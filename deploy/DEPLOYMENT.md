@@ -142,6 +142,62 @@ curl http://localhost:8222/healthz
 
 ---
 
+## GitHub Actions Secrets Setup
+
+For automated CI/CD deployments, configure these secrets in your GitHub repository:
+
+**Settings → Secrets and variables → Actions → New repository secret**
+
+### Required Secrets
+
+| Secret | Description | How to Get |
+|--------|-------------|------------|
+| `VULTR_HOST` | Vultr VPS IP address | Vultr dashboard |
+| `VULTR_SSH_KEY` | SSH private key for `docker` user | `cat ~/.ssh/id_ed25519` |
+| `GHCR_PAT` | GitHub PAT with `read:packages` scope | See below |
+
+### Creating the GHCR_PAT (Required for Private Repos)
+
+The `GITHUB_TOKEN` only works during workflow runs. Your Vultr server needs a Personal Access Token to pull images from GHCR.
+
+1. Go to **GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)**
+2. Click **Generate new token (classic)**
+3. Set:
+   - **Note:** `vultr-ghcr-pull`
+   - **Expiration:** 90 days (set calendar reminder to rotate)
+   - **Scopes:** Check only `read:packages`
+4. Click **Generate token**
+5. Copy the token and add it as `GHCR_PAT` secret in your repository
+
+### Optional Secrets (for Vercel deployment)
+
+| Secret | Description |
+|--------|-------------|
+| `VERCEL_TOKEN` | Vercel API token |
+| `VERCEL_ORG_ID` | Vercel organization ID |
+| `VERCEL_PROJECT_ID` | Vercel project ID |
+
+### First Manual Deploy (Before CI/CD)
+
+Before GitHub Actions can deploy, do an initial manual deploy:
+
+```bash
+# On Vultr as docker user
+cd /opt/conversational-platform
+
+# Set your image (replace with your actual repo)
+export API_IMAGE=ghcr.io/YOUR_USER/YOUR_REPO-api:latest
+
+# Login to GHCR (use your GitHub username and PAT)
+echo "YOUR_GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+
+# Pull and start
+docker compose -f docker-compose.prod.yml pull api
+docker compose -f docker-compose.prod.yml up -d
+```
+
+---
+
 ## Security Hardening Checklist
 
 ### Completed by Bootstrap Script:

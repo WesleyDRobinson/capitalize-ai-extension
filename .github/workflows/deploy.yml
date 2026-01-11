@@ -134,14 +134,18 @@ jobs:
           host: ${{ secrets.VULTR_HOST }}
           username: docker
           key: ${{ secrets.VULTR_SSH_KEY }}
+          envs: GHCR_PAT,GHCR_USER,IMAGE_NAME
           script: |
             cd /opt/conversational-platform
 
-            # Login to GHCR
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Login to GHCR using PAT (not GITHUB_TOKEN which only works in Actions)
+            echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            # Update image reference in compose file
+            export IMAGE_TAG="ghcr.io/$IMAGE_NAME:latest"
 
             # Pull latest image
-            docker compose -f docker-compose.prod.yml pull api
+            docker pull "$IMAGE_TAG"
 
             # Deploy with zero-downtime
             docker compose -f docker-compose.prod.yml up -d --no-deps api
@@ -154,6 +158,10 @@ jobs:
             docker image prune -f
 
             echo "Deployment successful!"
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_USER: ${{ github.repository_owner }}
+          IMAGE_NAME: ${{ github.repository }}-api
         continue-on-error: false
 
   deploy-client:
