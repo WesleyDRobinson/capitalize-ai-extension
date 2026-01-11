@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -35,7 +36,14 @@ func NewStreamHandler(
 	}
 }
 
+// ReplayCompleteEvent represents the completion of message replay.
+type ReplayCompleteEvent struct {
+	LastSequence uint64 `json:"last_sequence"`
+	MessageCount int    `json:"message_count"`
+}
+
 // Stream handles GET /api/v1/conversations/:id/stream
+// Supports ?after_sequence=N for resuming from a specific point
 func (h *StreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
@@ -50,6 +58,15 @@ func (h *StreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.conversationService.Get(ctx, tenantID, conversationID); err != nil {
 		writeError(w, http.StatusNotFound, "conversation not found")
 		return
+	}
+
+	// Parse after_sequence query param for replay
+	var afterSequence uint64
+	if seqStr := r.URL.Query().Get("after_sequence"); seqStr != "" {
+		seq, err := strconv.ParseUint(seqStr, 10, 64)
+		if err == nil {
+			afterSequence = seq
+		}
 	}
 
 	// Set SSE headers
@@ -71,24 +88,74 @@ func (h *StreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	// Create a channel for client disconnection
 	done := ctx.Done()
 
-	// Start heartbeat ticker
-	heartbeat := time.NewTicker(30 * time.Second)
-	defer heartbeat.Stop()
-
 	// Send initial connection event
 	sendSSEEvent(w, flusher, "connected", map[string]string{
 		"conversation_id": conversationID,
 	})
 
+	// Replay missed messages if after_sequence is provided or replay all if 0
+	var lastSequence uint64
+	var totalReplayed int
+
+	for {
+		// Fetch messages in batches
+		resp, err := h.messageService.GetMessages(ctx, tenantID, conversationID, afterSequence, 50)
+		if err != nil {
+			h.logger.Error("failed to replay messages", "error", err, "conversation_id", conversationID)
+			sendSSEEvent(w, flusher, "error", &model.ErrorEvent{
+				Code:    "replay_error",
+				Message: "Failed to replay messages",
+			})
+			break
+		}
+
+		// Send each message as an SSE event
+		for _, msg := range resp.Messages {
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			sendSSEEvent(w, flusher, "message", msg)
+			lastSequence = msg.Sequence
+			totalReplayed++
+		}
+
+		// Update cursor for next batch
+		if resp.HasMore {
+			afterSequence = lastSequence
+		} else {
+			break
+		}
+	}
+
+	// Send replay complete event
+	sendSSEEvent(w, flusher, "replay_complete", &ReplayCompleteEvent{
+		LastSequence: lastSequence,
+		MessageCount: totalReplayed,
+	})
+
+	h.logger.Info("message replay complete",
+		"conversation_id", conversationID,
+		"messages_replayed", totalReplayed,
+		"last_sequence", lastSequence,
+	)
+
+	// Start heartbeat ticker for keeping connection alive
+	heartbeat := time.NewTicker(30 * time.Second)
+	defer heartbeat.Stop()
+
+	// Keep connection open for live updates
 	for {
 		select {
 		case <-done:
 			// Client disconnected
-			h.logger.Info("SSE client disconnected")
+			h.logger.Info("SSE client disconnected", "conversation_id", conversationID)
 			return
 
 		case <-heartbeat.C:
-			// Send heartbeat
+			// Send heartbeat to keep connection alive
 			sendSSEEvent(w, flusher, "heartbeat", &model.HeartbeatEvent{
 				Timestamp: time.Now(),
 			})

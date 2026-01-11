@@ -60,7 +60,7 @@ func main() {
 		Token:    cfg.NATSToken,
 	}, log)
 	if err != nil {
-		log.Error("failed to connect to NATS")
+		log.Error("failed to connect to NATS", "error", err)
 		os.Exit(1)
 	}
 	defer natsClient.Close()
@@ -68,7 +68,7 @@ func main() {
 	// Ensure JetStream stream exists
 	streamManager := natsclient.NewStreamManager(natsClient)
 	if err := streamManager.EnsureStream(ctx); err != nil {
-		log.Error("failed to ensure stream")
+		log.Error("failed to ensure stream", "error", err)
 		os.Exit(1)
 	}
 
@@ -158,9 +158,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Info("server listening", logger.Global().With().Logger.Sugar().Infow("", "port", cfg.ServerPort).Desugar().Check(0, "").Entry)
+		log.Info("server listening", "port", cfg.ServerPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("server error")
+			log.Error("server error", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -177,7 +177,7 @@ func main() {
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Error("server forced to shutdown")
+		log.Error("server forced to shutdown", "error", err)
 	}
 
 	log.Info("server stopped")
