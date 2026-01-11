@@ -3,9 +3,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { db, Message, PendingMessage } from '../db';
 import { streamMessage } from '../lib/stream';
 import { useAppStore } from '../store/useAppStore';
+import { useToast } from '../components/common/Toast';
 
 export function useSendMessage(conversationId: string) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const {
     addMessage,
     startStreaming,
@@ -52,6 +54,7 @@ export function useSendMessage(conversationId: string) {
           },
           onError: (error) => {
             console.error('Stream error:', error);
+            toast.error(`Failed to get response: ${error.message || 'Unknown error'}`);
             stopStreaming();
             throw error;
           },
@@ -85,6 +88,8 @@ export function useSendMessage(conversationId: string) {
     },
     onError: (err) => {
       console.error('Failed to send message:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send message';
+      toast.error(errorMessage);
       stopStreaming();
     }
   });

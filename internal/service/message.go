@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 	"github.com/capitalize-ai/conversational-platform/pkg/logger"
 	"github.com/capitalize-ai/conversational-platform/pkg/metrics"
 )
+
+// ErrLLMNotConfigured is returned when no LLM client is available.
+var ErrLLMNotConfigured = errors.New("LLM service not configured: set ANTHROPIC_API_KEY or OPENAI_API_KEY")
 
 // MessageService handles message operations.
 type MessageService struct {
@@ -81,6 +85,12 @@ func (s *MessageService) SendWithStream(
 	userMsg, _, err := s.Send(ctx, tenantID, conversationID, req)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// Check if LLM client is available
+	if s.llmClient == nil {
+		s.logger.Error("LLM client not configured", "conversation_id", conversationID)
+		return userMsg, nil, ErrLLMNotConfigured
 	}
 
 	// Get conversation history for context

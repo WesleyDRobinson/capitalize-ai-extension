@@ -10,49 +10,62 @@ interface UseStreamOptions {
 
 export function useStream(conversationId: string | null, options: UseStreamOptions = {}) {
   const { setConnected, addMessage } = useAppStore();
-  const { onMessage } = options;
   const connectedRef = useRef(false);
 
-  const connect = useCallback(async () => {
-    if (!conversationId || connectedRef.current) return;
+  // Store callbacks in refs to avoid recreating effect dependencies
+  const onMessageRef = useRef(options.onMessage);
+  onMessageRef.current = options.onMessage;
+
+  const addMessageRef = useRef(addMessage);
+  addMessageRef.current = addMessage;
+
+  const setConnectedRef = useRef(setConnected);
+  setConnectedRef.current = setConnected;
+
+  // Stable connect function that only depends on conversationId
+  const connect = useCallback(async (convId: string) => {
+    if (connectedRef.current) return;
 
     try {
-      await conversationStream.connect(conversationId, {
+      await conversationStream.connect(convId, {
         onToken: () => {
           // Tokens are handled by useSendMessage during active streaming
         },
         onComplete: (message) => {
-          addMessage(message);
-          onMessage?.(message);
+          addMessageRef.current(message);
+          onMessageRef.current?.(message);
         },
         onError: (error) => {
           console.error('Stream error:', error);
-          setConnected(false);
+          connectedRef.current = false;
+          setConnectedRef.current(false);
         },
         onConnected: () => {
           connectedRef.current = true;
-          setConnected(true);
+          setConnectedRef.current(true);
         },
         onDisconnected: () => {
           connectedRef.current = false;
-          setConnected(false);
+          setConnectedRef.current(false);
         }
       });
     } catch (error) {
       console.error('Failed to connect stream:', error);
-      setConnected(false);
+      connectedRef.current = false;
+      setConnectedRef.current(false);
     }
-  }, [conversationId, addMessage, onMessage, setConnected]);
+  }, []); // No dependencies - uses refs for all callbacks
 
   const disconnect = useCallback(() => {
     conversationStream.disconnect();
     connectedRef.current = false;
-    setConnected(false);
-  }, [setConnected]);
+    setConnectedRef.current(false);
+  }, []); // No dependencies - uses refs
 
+  // Effect only runs when conversationId changes
   useEffect(() => {
     if (conversationId) {
-      connect();
+      connect(conversationId);
     }
 
     return () => {
@@ -62,7 +75,7 @@ export function useStream(conversationId: string | null, options: UseStreamOptio
 
   return {
     isConnected: connectedRef.current,
-    connect,
+    connect: () => conversationId && connect(conversationId),
     disconnect
   };
 }

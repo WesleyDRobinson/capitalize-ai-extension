@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConversationList } from './components/Sidebar/ConversationList';
 import { ChatContainer } from './components/Chat/ChatContainer';
+import { ToastContainer } from './components/common/Toast';
 import { useAppStore } from './store/useAppStore';
 import { isAuthenticated, setAccessToken, generateDemoToken } from './lib/auth';
 
@@ -140,6 +141,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppContent />
+      <ToastContainer />
     </QueryClientProvider>
   );
 }

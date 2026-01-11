@@ -8,6 +8,15 @@ interface StreamingState {
   streamingConversationId: string | null;
 }
 
+export type ToastType = 'error' | 'success' | 'info' | 'warning';
+
+export interface Toast {
+  id: string;
+  type: ToastType;
+  message: string;
+  duration?: number;
+}
+
 interface AppState {
   // Auth
   isAuthenticated: boolean;
@@ -46,6 +55,12 @@ interface AppState {
   // Sync
   isSyncing: boolean;
   setSyncing: (syncing: boolean) => void;
+
+  // Toasts/Notifications
+  toasts: Toast[];
+  addToast: (type: ToastType, message: string, duration?: number) => void;
+  removeToast: (id: string) => void;
+  clearToasts: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -130,5 +145,27 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Sync
   isSyncing: false,
-  setSyncing: (syncing) => set({ isSyncing: syncing })
+  setSyncing: (syncing) => set({ isSyncing: syncing }),
+
+  // Toasts/Notifications
+  toasts: [],
+  addToast: (type, message, duration = 5000) => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    set((state) => ({
+      toasts: [...state.toasts, { id, type, message, duration }]
+    }));
+    // Auto-remove after duration
+    if (duration > 0) {
+      setTimeout(() => {
+        set((state) => ({
+          toasts: state.toasts.filter((t) => t.id !== id)
+        }));
+      }, duration);
+    }
+  },
+  removeToast: (id) =>
+    set((state) => ({
+      toasts: state.toasts.filter((t) => t.id !== id)
+    })),
+  clearToasts: () => set({ toasts: [] })
 }));
