@@ -1,0 +1,63 @@
+# Northflank deployment configuration
+apiVersion: v1
+kind: CombinedService
+metadata:
+  name: api
+spec:
+  deployment:
+    instances: 2
+    internal:
+      cpu: 1000m
+      memory: 2Gi
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+  ports:
+    - name: http
+      internalPort: 8080
+      protocol: HTTP
+      public: true
+      domains:
+        - api.yourapp.com
+  healthChecks:
+    liveness:
+      type: http
+      path: /health
+      port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readiness:
+      type: http
+      path: /ready
+      port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 5
+  runtimeEnvironment:
+    # NATS connection
+    - name: NATS_URL
+      value: tls://nats.yourapp.com:4222
+    - name: NATS_CA_FILE
+      fromSecret: nats-certs
+      key: ca.pem
+    - name: NATS_CERT_FILE
+      fromSecret: nats-certs
+      key: client-cert.pem
+    - name: NATS_KEY_FILE
+      fromSecret: nats-certs
+      key: client-key.pem
+    # Auth
+    - name: JWT_SECRET
+      fromSecret: jwt-secret
+      key: secret
+    # LLM
+    - name: ANTHROPIC_API_KEY
+      fromSecret: llm-keys
+      key: anthropic
+    # Logging
+    - name: LOG_LEVEL
+      value: info
+  build:
+    type: dockerfile
+    dockerfile: Dockerfile
+    context: .
